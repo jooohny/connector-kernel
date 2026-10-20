@@ -1,0 +1,101 @@
+{
+  "name": "connector-kernel",
+  "version": "0.0.1",
+  "description": "NestJS + TypeORM + PostgreSQL service skeleton",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build && npm run build:migrations",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"migrations/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main.js",
+    "lint": "eslint \"{src,tests,migrations}/**/*.ts\" --fix",
+    "lint:check": "eslint \"{src,tests,migrations}/**/*.ts\" --max-warnings 0",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "test:e2e": "jest --config ./tests/jest-e2e.json --runInBand",
+    "test:docker": "docker compose -f docker-compose.test.yml run --rm tests; code=$?; docker compose -f docker-compose.test.yml down -v; exit $code",
+    "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/modules/payments/infrastructure/persistence/database/data-source.ts",
+    "migration:run": "npm run typeorm -- migration:run",
+    "migration:revert": "npm run typeorm -- migration:revert",
+    "migration:show": "npm run typeorm -- migration:show",
+    "typecheck": "tsc --noEmit",
+    "typecheck:cold": "tsc --noEmit --incremental false",
+    "deps": "depcruise src --config .dependency-cruiser.cjs",
+    "verify": "npm run lint:check && npm run typecheck:cold && npm run deps && npm run test:unit",
+    "up": "cp -n .env.example .env 2>/dev/null; docker compose up --build",
+    "down": "docker compose down",
+    "build:migrations": "rm -rf dist-migrations && tsc -p tsconfig.migrations.json",
+    "test:unit": "jest"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "4.0.4",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/schedule": "^6.1.3",
+    "@nestjs/typeorm": "11.0.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "pg": "8.23.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "typeorm": "0.3.31"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@testcontainers/postgresql": "11.14.0",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "@types/supertest": "^7.0.0",
+    "dependency-cruiser": "17.4.3",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.2",
+    "globals": "^17.0.0",
+    "jest": "^30.0.0",
+    "prettier": "^3.4.2",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": ".",
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/tests/unit"
+    ],
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "src/**/*.(t|j)s"
+    ],
+    "coverageDirectory": "./coverage",
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@core/(.*)$": "<rootDir>/src/@core/$1"
+    }
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  }
+}

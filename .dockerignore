@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+tests
+.git
+.github
+.vscode
+.env
+.env.local
+*.md
+.eslintcache
+eslint.config.mjs
+cspell.json
+dist-migrations

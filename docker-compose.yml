@@ -1,0 +1,60 @@
+x-database-environment: &database-environment
+  DB_HOST: ${DB_HOST:?missing - copy .env.example to .env}
+  DB_PORT: ${DB_PORT:?missing - copy .env.example to .env}
+  DB_USER: ${DB_USER:?missing - copy .env.example to .env}
+  DB_PASSWORD: ${DB_PASSWORD:?missing - copy .env.example to .env}
+  DB_NAME: ${DB_NAME:?missing - copy .env.example to .env}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:?missing - copy .env.example to .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?missing - copy .env.example to .env}
+      POSTGRES_DB: ${DB_NAME:?missing - copy .env.example to .env}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - connector_kernel-postgres-data:/var/lib/postgresql/data
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment: *database-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      <<: *database-environment
+      PORT: ${PORT:-3000}
+      ALPHA_BASE_URL: ${ALPHA_BASE_URL:?missing - copy .env.example to .env}
+      ALPHA_API_KEY: ${ALPHA_API_KEY:?missing - copy .env.example to .env}
+      ALPHA_WEBHOOK_SECRET: ${ALPHA_WEBHOOK_SECRET:?missing - copy .env.example to .env}
+      BRAVO_BASE_URL: ${BRAVO_BASE_URL:?missing - copy .env.example to .env}
+      BRAVO_WEBHOOK_SECRET: ${BRAVO_WEBHOOK_SECRET:?missing - copy .env.example to .env}
+      WORKERS_ENABLED: ${WORKERS_ENABLED:-true}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - '${PORT:-3000}:${PORT:-3000}'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:$${PORT:-3000}/health || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  connector_kernel-postgres-data:

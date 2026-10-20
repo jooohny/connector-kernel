@@ -1,0 +1,21 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "bignumber",
+    "idempotence",
+    "idempotency",
+    "nestjs",
+    "nodenext",
+    "sqlstate",
+    "testcontainers",
+    "typeorm",
+    "uniq"
+  ],
+  "ignorePaths": [
+    "node_modules/**",
+    "dist/**",
+    "coverage/**",
+    "package-lock.json"
+  ]
+}

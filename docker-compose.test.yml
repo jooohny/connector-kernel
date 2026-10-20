@@ -1,0 +1,38 @@
+# The test suite inside containers, for reviewers who prefer not to run Node on their machine.
+# The code is mounted read-only and copied in; node_modules are installed in the container.
+# The e2e tests use the database below through TEST_DATABASE_URL, so no Docker socket is shared.
+#
+#   npm run test:docker        (or the two docker compose commands it runs)
+services:
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: connector_kernel_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U test -d connector_kernel_test']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  tests:
+    image: node:22-bookworm-slim
+    working_dir: /app
+    volumes:
+      - .:/src:ro
+    environment:
+      TEST_DATABASE_URL: postgresql://test:test@test-db:5432/connector_kernel_test
+    command:
+      - bash
+      - -c
+      - >-
+        tar -C /src --exclude=./node_modules --exclude=./dist --exclude=./dist-migrations
+        --exclude=./.env --exclude=./coverage -cf - . | tar -xf - &&
+        npm ci --no-audit --no-fund &&
+        npm test
+    depends_on:
+      test-db:
+        condition: service_healthy

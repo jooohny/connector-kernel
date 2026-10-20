@@ -1,0 +1,5 @@
+export enum SqlState {
+  UNIQUE_VIOLATION = '23505',
+  CHECK_VIOLATION = '23514',
+  LOCK_NOT_AVAILABLE = '55P03',
+}
