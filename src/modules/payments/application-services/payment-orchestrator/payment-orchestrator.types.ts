@@ -11,6 +11,10 @@ import type {
 /** The attempt to send next, with the payment its request is mapped from. */
 export type NextAttempt = With<Attempt, 'payment'>;
 
+export type OpenAttemptInput = Pick<Attempt, 'connector' | 'attemptNo'> & {
+  readonly now: Date;
+};
+
 export interface Report {
   readonly attempt: Attempt;
   readonly observation: Observation;
@@ -20,7 +24,7 @@ export interface Report {
   readonly detailsReturned?: boolean;
 }
 
-export interface CreateReplyInput {
+export interface ApplyResponseInput {
   readonly attempt: Attempt;
   readonly reply: CreateReply;
   readonly now: Date;

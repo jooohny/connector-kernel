@@ -1,9 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { WEBHOOK_DELIVERY_REPOSITORY } from '../../../domain';
-import type { WebhookDeliveryRepository } from '../../../domain';
+import { CONNECTORS, WEBHOOK_DELIVERY_REPOSITORY } from '../../../domain';
+import type {
+  ConnectorRegistry,
+  WebhookDeliveryRepository,
+} from '../../../domain';
 import { SignatureStatus } from '../../../domain/shared/payment-enums';
-import { PaymentOrchestrator } from '../../payment-orchestrator/payment-orchestrator';
 import { WebhookOutcome } from '../webhooks.service.types';
 import type { VerifyResult, WebhookCommand } from '../webhooks.service.types';
 
@@ -12,15 +14,15 @@ export class VerifyWebhookUseCase {
   public constructor(
     @Inject(WEBHOOK_DELIVERY_REPOSITORY)
     private readonly deliveriesRepo: WebhookDeliveryRepository,
-    private readonly orchestrator: PaymentOrchestrator,
+    @Inject(CONNECTORS) private readonly connectors: ConnectorRegistry,
   ) {}
 
   /** An unsigned body is never parsed: its event id proves nothing. */
   public async execute(command: WebhookCommand): Promise<VerifyResult> {
     const receivedAt = new Date();
-    const connector = this.orchestrator.connectorNamed(command.connector);
+    const connector = this.connectors.get(command.connector);
 
-    if (connector === null) {
+    if (connector === undefined) {
       await this.recordDelivery(
         command,
         receivedAt,

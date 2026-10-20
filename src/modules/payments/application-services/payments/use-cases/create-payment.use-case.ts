@@ -3,19 +3,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ConnectorName } from '../../../domain/shared/payment-enums';
 import { ConflictException, ValidationException } from '@core/exceptions/index';
 
-import {
-  ATTEMPT_REPOSITORY,
-  LIFETIME_MS,
-  Money,
-  PAYMENT_REPOSITORY,
-  SweepSchedule,
-} from '../../../domain';
-import type {
-  AttemptRepository,
-  NewPayment,
-  PaymentLock,
-  PaymentRepository,
-} from '../../../domain';
+import { LIFETIME_MS, Money, PAYMENT_REPOSITORY } from '../../../domain';
+import type { NewPayment, Payment, PaymentRepository } from '../../../domain';
 import { PaymentOrchestrator } from '../../payment-orchestrator/payment-orchestrator';
 import type { NextAttempt } from '../../payment-orchestrator/payment-orchestrator.types';
 import type {
@@ -24,27 +13,12 @@ import type {
   CreatedPayment,
 } from '../payments.service.types';
 
-/** Request fields a replay must repeat exactly (ADR 0002). */
-const REPLAYED_FIELDS = [
-  'type',
-  'method',
-  'countryIso2',
-  'currencyIso3',
-  'amountMinor',
-  'bankId',
-  'accountNumber',
-  'accountName',
-] as const satisfies readonly (keyof NewPayment)[];
-
 @Injectable()
 export class CreatePaymentUseCase {
   public constructor(
     @Inject(PAYMENT_REPOSITORY)
     private readonly paymentsRepo: PaymentRepository,
-    @Inject(ATTEMPT_REPOSITORY)
-    private readonly attemptsRepo: AttemptRepository,
     private readonly orchestrator: PaymentOrchestrator,
-    private readonly schedule: SweepSchedule,
   ) {}
 
   public async execute(command: CreatePaymentCommand): Promise<CreatedPayment> {
@@ -58,30 +32,11 @@ export class CreatePaymentUseCase {
     const [connector] = this.routeOf(payment);
     const first = await this.paymentsRepo.insertOrIgnoreByIdempotencyKey(
       payment,
-      async (lock) => this.insertFirstAttempt(connector, now, lock),
+      async (lock) =>
+        this.orchestrator.openAttempt({ connector, attemptNo: 1, now }, lock),
     );
 
     return first === null ? this.replay(payment) : this.sendFirst(first);
-  }
-
-  private async insertFirstAttempt(
-    connector: ConnectorName,
-    now: Date,
-    lock: PaymentLock,
-  ): Promise<NextAttempt> {
-    const attempt = await this.attemptsRepo.insertOne(
-      {
-        attemptNo: 1,
-        connector,
-        nextCheckAt: this.schedule.firstCheckAt(
-          now,
-          this.orchestrator.hasStatusQuery(connector),
-        ),
-      },
-      lock,
-    );
-
-    return { ...attempt, payment: lock.payment };
   }
 
   private routeOf(payment: NewPayment): readonly ConnectorName[] {
@@ -109,7 +64,7 @@ export class CreatePaymentUseCase {
       payment.idempotencyKey,
     );
 
-    if (!REPLAYED_FIELDS.every((field) => existing[field] === payment[field])) {
+    if (!this.sameRequest(existing, payment)) {
       throw new ConflictException(ConflictException.Message.PARAMS_MISMATCH);
     }
 
@@ -123,6 +78,20 @@ export class CreatePaymentUseCase {
     }
 
     return existing.resultSnapshot;
+  }
+
+  /** Request fields a replay must repeat exactly (ADR 0002). */
+  private sameRequest(existing: Payment, payment: NewPayment): boolean {
+    return (
+      existing.type === payment.type &&
+      existing.method === payment.method &&
+      existing.countryIso2 === payment.countryIso2 &&
+      existing.currencyIso3 === payment.currencyIso3 &&
+      existing.amountMinor === payment.amountMinor &&
+      existing.bankId === payment.bankId &&
+      existing.accountNumber === payment.accountNumber &&
+      existing.accountName === payment.accountName
+    );
   }
 
   /** The first reply is our result; it is stored as sent (ADR 0002). */

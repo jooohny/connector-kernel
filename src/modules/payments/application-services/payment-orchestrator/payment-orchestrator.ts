@@ -33,8 +33,9 @@ import type {
 
 import type {
   Applied,
-  CreateReplyInput,
+  ApplyResponseInput,
   NextAttempt,
+  OpenAttemptInput,
   Report,
 } from './payment-orchestrator.types';
 
@@ -77,13 +78,28 @@ export class PaymentOrchestrator {
     return connector;
   }
 
-  /** Raw webhook path value → connector, or null when none has that name. */
-  public connectorNamed(name: string): Connector | null {
-    return this.registry.get(name) ?? null;
-  }
-
   public hasStatusQuery(name: ConnectorName): boolean {
     return this.connector(name).queryStatus !== undefined;
+  }
+
+  public async openAttempt(
+    input: OpenAttemptInput,
+    lock: PaymentLock,
+  ): Promise<NextAttempt> {
+    const { connector, attemptNo, now } = input;
+    const attempt = await this.attemptsRepo.insertOne(
+      {
+        attemptNo,
+        connector,
+        nextCheckAt: this.schedule.firstCheckAt(
+          now,
+          this.hasStatusQuery(connector),
+        ),
+      },
+      lock,
+    );
+
+    return { ...attempt, payment: lock.payment };
   }
 
   /**
@@ -99,41 +115,13 @@ export class PaymentOrchestrator {
       const attempt = await this.attemptsRepo.getOne(next.id, lock);
 
       if (reply.observation.status === null) {
-        await this.applyUnknownReply({ attempt, reply, now }, lock);
-
-        return;
+        return await this.applyUnknownResponse({ attempt, reply, now }, lock);
       }
 
-      const { result } = await this.applyReport(
-        {
-          attempt,
-          observation: reply.observation,
-          providerEventId: null,
-          providerOrderId: reply.providerOrderId,
-          detailsReturned: reply.qrCode !== null,
-          now,
-        },
-        lock,
-      );
+      const result = await this.applyResponse({ attempt, reply, now }, lock);
 
+      // Not applied: a webhook already moved the attempt and made the decision.
       if (result !== EventResult.APPLIED) {
-        // A webhook got here first and keeps its status; only the reply knows the QR was returned.
-        await this.attemptsRepo.updateStatus(
-          {
-            id: attempt.id,
-            change: {
-              from: attempt.status,
-              status: attempt.status,
-              failureCause: attempt.failureCause,
-            },
-            providerCode: attempt.providerCode,
-            providerMessage: attempt.providerMessage,
-            providerOrderId: reply.providerOrderId,
-            detailsReturned: reply.qrCode !== null,
-          },
-          lock,
-        );
-
         return;
       }
 
@@ -143,6 +131,46 @@ export class PaymentOrchestrator {
     });
 
     return reply;
+  }
+
+  public async applyResponse(
+    input: ApplyResponseInput,
+    lock: PaymentLock,
+  ): Promise<EventResult> {
+    const { attempt, reply, now } = input;
+
+    const { result } = await this.applyReport(
+      {
+        attempt,
+        observation: reply.observation,
+        providerEventId: null,
+        providerOrderId: reply.providerOrderId,
+        detailsReturned: reply.qrCode !== null,
+        now,
+      },
+      lock,
+    );
+
+    if (result !== EventResult.APPLIED) {
+      // A webhook got here first and keeps its status; only the reply knows the QR was returned.
+      await this.attemptsRepo.updateStatus(
+        {
+          id: attempt.id,
+          change: {
+            from: attempt.status,
+            status: attempt.status,
+            failureCause: attempt.failureCause,
+          },
+          providerCode: attempt.providerCode,
+          providerMessage: attempt.providerMessage,
+          providerOrderId: reply.providerOrderId,
+          detailsReturned: reply.qrCode !== null,
+        },
+        lock,
+      );
+    }
+
+    return result;
   }
 
   public async decide(
@@ -163,8 +191,8 @@ export class PaymentOrchestrator {
     return this.perform(action, now, lock);
   }
 
-  private async applyUnknownReply(
-    input: CreateReplyInput,
+  private async applyUnknownResponse(
+    input: ApplyResponseInput,
     lock: PaymentLock,
   ): Promise<void> {
     const { attempt, reply, now } = input;
@@ -271,18 +299,9 @@ export class PaymentOrchestrator {
       return null;
     }
 
-    const attempt = await this.attemptsRepo.insertOne(
-      {
-        attemptNo: action.attemptNo,
-        connector: action.connector,
-        nextCheckAt: this.schedule.firstCheckAt(
-          now,
-          this.hasStatusQuery(action.connector),
-        ),
-      },
+    return this.openAttempt(
+      { connector: action.connector, attemptNo: action.attemptNo, now },
       lock,
     );
-
-    return { ...attempt, payment: lock.payment };
   }
 }
